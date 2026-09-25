@@ -1,0 +1,2 @@
+playwright>=1.45
+pytest>=8

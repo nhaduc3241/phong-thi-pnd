@@ -1,0 +1,25 @@
+{
+  "retcode": 0,
+  "message": "success",
+  "data": {
+    "sls_tracking_info": {
+      "sls_tn": "SPXVN000000000001",
+      "records": [
+        {
+          "actual_time": 1758700800,
+          "tracking_name": "Pickup Done",
+          "buyer_description": "Đơn hàng đã được lấy thành công",
+          "milestone_name": "Đã lấy hàng",
+          "current_location": {"location_name": "Kho Hà Nội"}
+        },
+        {
+          "actual_time": 1758787200,
+          "tracking_name": "Delivering",
+          "buyer_description": "Đơn hàng đang được giao",
+          "milestone_name": "Đang giao hàng",
+          "current_location": {"location_name": "Bưu cục Cầu Giấy"}
+        }
+      ]
+    }
+  }
+}

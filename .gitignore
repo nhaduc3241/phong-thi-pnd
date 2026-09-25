@@ -1,0 +1,4 @@
+__pycache__/
+.pytest_cache/
+.spx_profile/
+.spx_cache.sqlite3
