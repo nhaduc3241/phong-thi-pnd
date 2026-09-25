@@ -180,15 +180,20 @@ class SyncReport:
 def sync_orders(woo: WooClient, tracker: Tracker, state: StateStore,
                 cfg: SyncConfig, log=print) -> SyncReport:
     report = SyncReport()
-    for order in woo.list_orders(cfg.statuses):
+    log(f"Đang lấy đơn WooCommerce ({', '.join(cfg.statuses)})...")
+    orders = woo.list_orders(cfg.statuses)
+    log(f"Có {len(orders)} đơn cần kiểm tra")
+    for order in orders:
         oid = order["id"]
         report.checked += 1
         tn = extract_tracking_number(order, cfg.meta_keys)
         if tn is None:
             tn = extract_tracking_number({}, (), notes=woo.list_notes(oid))
         if tn is None:
+            log(f"#{oid}: chưa có mã SPX, bỏ qua")
             report.no_tracking.append(oid)
             continue
+        log(f"#{oid}: tra SPX {tn}...")
         try:
             result = tracker.track(tn)
         except SpxError as e:

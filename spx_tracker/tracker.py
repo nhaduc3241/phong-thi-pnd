@@ -115,16 +115,14 @@ class SpxTracker:
         if self._ctx is None:
             raise RuntimeError("Dùng SpxTracker trong khối `with SpxTracker() as t:`")
         self._throttle()
-        page: Page = self._ctx.new_page()
-        try:
-            with page.expect_response(
-                lambda r: API_MARKER in r.url and tn in r.url,
-                timeout=self.timeout_ms,
-            ) as resp_info:
-                page.goto(TRACK_PAGE_URL.format(tn=tn), wait_until="domcontentloaded")
-            resp = resp_info.value
-            if resp.status != 200:
-                raise SpxError(f"HTTP {resp.status}")
-            return resp.json()
-        finally:
-            page.close()
+        # Dùng lại tab có sẵn (tab about:blank lúc mở trình duyệt) thay vì mở tab mới
+        page: Page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
+        with page.expect_response(
+            lambda r: API_MARKER in r.url and tn in r.url,
+            timeout=self.timeout_ms,
+        ) as resp_info:
+            page.goto(TRACK_PAGE_URL.format(tn=tn), wait_until="domcontentloaded")
+        resp = resp_info.value
+        if resp.status != 200:
+            raise SpxError(f"HTTP {resp.status}")
+        return resp.json()
