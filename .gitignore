@@ -4,3 +4,4 @@ __pycache__/
 .spx_cache.sqlite3
 .env
 .spx_woo_state.sqlite3
+sync.log
