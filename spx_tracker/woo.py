@@ -246,8 +246,10 @@ def sync_orders(woo: WooClient, tracker: Tracker, state: StateStore,
             log(f"#{oid}: gán mã vận đơn {tn}")
             changes["meta_data"] = [{"key": cfg.tracking_meta_key, "value": tn}]
             report.assigned.append(oid)
-            if cfg.shipping_status and order.get("status") != cfg.shipping_status:
-                changes["status"] = cfg.shipping_status
+
+        # SPX đã có đơn (mã mới gán hoặc có sẵn) mà đơn vẫn chưa ở trạng thái đang giao
+        if cfg.shipping_status and order.get("status") != cfg.shipping_status:
+            changes["status"] = cfg.shipping_status
 
         # 2. Đã giao
         if cfg.delivered_status and is_delivered(result, cfg.delivered_keywords):

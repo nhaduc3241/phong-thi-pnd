@@ -156,3 +156,14 @@ def test_processing_limited_by_age_shipping_unlimited(tmp_path):
     assert st2 == ("shipping",) and after2 is None
     assert rep.checked == 2
     assert tracker.queries == ["DEERSTORE10", "SPXVN000000000011"]
+
+
+def test_existing_tracking_in_processing_moves_to_shipping(tmp_path):
+    woo = FakeWoo([{"id": 4212, "number": "4212", "status": "processing",
+                    "meta_data": [{"key": "spx_tracking", "value": "SPXVN061359307249"}]}])
+    tracker = FakeTracker({"SPXVN061359307249": result("Preparing to ship")})
+    cfg = SyncConfig(ref_prefix="DEERSTORE", shipping_status="shipping",
+                     delivered_status="completed")
+    rep = sync_orders(woo, tracker, StateStore(str(tmp_path / "s.db")), cfg, log=quiet)
+    assert rep.assigned == []
+    assert woo.updates == [(4212, {"status": "shipping"})]
