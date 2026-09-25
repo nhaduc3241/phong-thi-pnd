@@ -7,6 +7,7 @@ Cấu hình đặt trong file .env (xem .env.example) hoặc biến môi trườ
 """
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -35,10 +36,26 @@ def env_bool(name: str) -> bool:
     return os.environ.get(name, "").lower() in ("1", "true", "yes", "on")
 
 
+def inspect_order(woo: WooClient, order_id: int) -> int:
+    order = woo.get_order(order_id)
+    print(f"Đơn #{order_id} | trạng thái: {order.get('status')} | "
+          f"vận chuyển: {[l.get('method_title') for l in order.get('shipping_lines', [])]}")
+    print(f"Ghi chú của khách: {order.get('customer_note')!r}")
+    print("\n--- meta_data ---")
+    for m in order.get("meta_data", []):
+        print(f"{m.get('key')} = {json.dumps(m.get('value'), ensure_ascii=False)[:200]}")
+    print("\n--- ghi chú đơn ---")
+    for n in woo.list_notes(order_id):
+        print(f"[{n.get('date_created')}] {n.get('note')}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--headful", action="store_true")
+    ap.add_argument("--inspect", type=int, metavar="ORDER_ID",
+                    help="In meta và ghi chú của một đơn để tìm chỗ lưu mã vận đơn")
     args = ap.parse_args()
 
     here = Path(__file__).resolve().parent
@@ -52,6 +69,9 @@ def main() -> int:
 
     woo = WooClient(os.environ["WOO_URL"], os.environ["WOO_KEY"], os.environ["WOO_SECRET"],
                     auth_in_query=env_bool("WOO_AUTH_IN_QUERY"))
+    if args.inspect:
+        return inspect_order(woo, args.inspect)
+
     cfg = SyncConfig(
         statuses=env_list("WOO_STATUSES", ("processing",)),
         meta_keys=env_list("WOO_TRACKING_META_KEYS", DEFAULT_META_KEYS),

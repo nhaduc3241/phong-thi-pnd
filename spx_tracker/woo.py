@@ -70,6 +70,9 @@ class WooClient:
                 return orders
             page += 1
 
+    def get_order(self, order_id: int) -> dict:
+        return self._request("GET", f"/orders/{order_id}")
+
     def list_notes(self, order_id: int) -> list[dict]:
         return self._request("GET", f"/orders/{order_id}/notes")
 
