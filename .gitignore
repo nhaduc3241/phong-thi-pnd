@@ -2,3 +2,5 @@ __pycache__/
 .pytest_cache/
 .spx_profile/
 .spx_cache.sqlite3
+.env
+.spx_woo_state.sqlite3
