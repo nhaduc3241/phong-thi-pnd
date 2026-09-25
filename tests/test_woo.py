@@ -41,10 +41,11 @@ def test_is_delivered_and_note():
 class FakeWoo:
     def __init__(self, orders, notes=None):
         self.orders, self.notes_by_id = orders, notes or {}
-        self.added, self.updates = [], []
+        self.added, self.updates, self.list_calls = [], [], []
 
-    def list_orders(self, statuses):
-        return self.orders
+    def list_orders(self, statuses, after=None):
+        self.list_calls.append((tuple(statuses), after))
+        return [o for o in self.orders if o.get("status", "processing") in statuses]
 
     def list_notes(self, oid):
         return self.notes_by_id.get(oid, [])
@@ -137,3 +138,21 @@ def test_dry_run_writes_nothing(tmp_path):
                                  delivered_status="completed", dry_run=True), log=quiet)
     assert rep.assigned == [1] and rep.completed == [1]
     assert woo.added == [] and woo.updates == []
+
+
+def test_processing_limited_by_age_shipping_unlimited(tmp_path):
+    woo = FakeWoo([
+        {"id": 10, "number": "10", "status": "processing", "meta_data": []},
+        {"id": 11, "number": "11", "status": "shipping",
+         "meta_data": [{"key": "spx_tracking", "value": "SPXVN000000000011"}]},
+    ])
+    tracker = FakeTracker({"SPXVN000000000011": result("Đang giao hàng")})
+    cfg = SyncConfig(ref_prefix="DEERSTORE", shipping_status="shipping", max_age_days=5)
+    rep = sync_orders(woo, tracker, StateStore(str(tmp_path / "s.db")), cfg, log=quiet)
+
+    (st1, after1), (st2, after2) = woo.list_calls
+    assert st1 == ("processing",) and after1 is not None
+    assert 4.9 < (datetime.now() - after1).total_seconds() / 86400 < 5.1
+    assert st2 == ("shipping",) and after2 is None
+    assert rep.checked == 2
+    assert tracker.queries == ["DEERSTORE10", "SPXVN000000000011"]

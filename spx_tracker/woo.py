@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any, Iterable, Protocol
 
 import requests
@@ -59,13 +60,14 @@ class WooClient:
             raise RuntimeError(f"WooCommerce {method} {path} -> HTTP {r.status_code}: {r.text[:300]}")
         return r.json()
 
-    def list_orders(self, statuses: Iterable[str]) -> list[dict]:
+    def list_orders(self, statuses: Iterable[str], after: datetime | None = None) -> list[dict]:
         orders, page = [], 1
         while True:
-            batch = self._request("GET", "/orders", params={
-                "status": ",".join(statuses), "per_page": 50, "page": page,
-                "orderby": "date", "order": "desc",
-            })
+            params = {"status": ",".join(statuses), "per_page": 50, "page": page,
+                      "orderby": "date", "order": "desc"}
+            if after is not None:
+                params["after"] = after.strftime("%Y-%m-%dT%H:%M:%S")
+            batch = self._request("GET", "/orders", params=params)
             orders.extend(batch)
             if len(batch) < 50:
                 return orders
@@ -164,7 +166,9 @@ class Tracker(Protocol):
 
 @dataclass
 class SyncConfig:
+    # Đơn mới cần tìm mã vận đơn: chỉ lấy đơn tạo trong max_age_days ngày gần nhất
     statuses: tuple[str, ...] = ("processing",)
+    max_age_days: int | None = 5
     meta_keys: tuple[str, ...] = DEFAULT_META_KEYS
     delivered_keywords: tuple[str, ...] = DEFAULT_DELIVERED_KEYWORDS
     # Nếu có, đơn chưa có mã SPX sẽ được tra bằng mã tham chiếu <ref_prefix><số đơn>,
@@ -198,8 +202,14 @@ def real_tracking_number(result: TrackingResult) -> str | None:
 def sync_orders(woo: WooClient, tracker: Tracker, state: StateStore,
                 cfg: SyncConfig, log=print) -> SyncReport:
     report = SyncReport()
-    log(f"Đang lấy đơn WooCommerce ({', '.join(cfg.statuses)})...")
-    orders = woo.list_orders(cfg.statuses)
+    after = (datetime.now() - timedelta(days=cfg.max_age_days)) if cfg.max_age_days else None
+    log(f"Đang lấy đơn WooCommerce ({', '.join(cfg.statuses)}"
+        f"{f', {cfg.max_age_days} ngày gần nhất' if after else ''})...")
+    orders = woo.list_orders(cfg.statuses, after=after)
+    # Đơn đang giao thì theo dõi tới khi giao xong, không giới hạn ngày
+    if cfg.shipping_status and cfg.shipping_status not in cfg.statuses:
+        seen = {o["id"] for o in orders}
+        orders += [o for o in woo.list_orders((cfg.shipping_status,)) if o["id"] not in seen]
     log(f"Có {len(orders)} đơn cần kiểm tra")
     for order in orders:
         oid = order["id"]

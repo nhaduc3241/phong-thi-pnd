@@ -74,6 +74,7 @@ def main() -> int:
 
     cfg = SyncConfig(
         statuses=env_list("WOO_STATUSES", ("processing",)),
+        max_age_days=int(os.environ.get("MAX_AGE_DAYS", "5") or 0) or None,
         meta_keys=env_list("WOO_TRACKING_META_KEYS", DEFAULT_META_KEYS),
         delivered_keywords=env_list("SPX_DELIVERED_KEYWORDS", DEFAULT_DELIVERED_KEYWORDS),
         ref_prefix=os.environ.get("ORDER_REF_PREFIX", "").strip(),
