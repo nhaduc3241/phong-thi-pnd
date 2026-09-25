@@ -76,7 +76,10 @@ def main() -> int:
         statuses=env_list("WOO_STATUSES", ("processing",)),
         meta_keys=env_list("WOO_TRACKING_META_KEYS", DEFAULT_META_KEYS),
         delivered_keywords=env_list("SPX_DELIVERED_KEYWORDS", DEFAULT_DELIVERED_KEYWORDS),
-        complete_on_delivered=env_bool("COMPLETE_ON_DELIVERED"),
+        ref_prefix=os.environ.get("ORDER_REF_PREFIX", "").strip(),
+        tracking_meta_key=os.environ.get("TRACKING_META_KEY", "spx_tracking").strip(),
+        shipping_status=os.environ.get("SHIPPING_STATUS", "").strip() or None,
+        delivered_status=os.environ.get("DELIVERED_STATUS", "").strip() or None,
         customer_note=not env_bool("PRIVATE_NOTES"),
         dry_run=args.dry_run,
     )
@@ -84,11 +87,12 @@ def main() -> int:
     with SpxTracker(headless=not args.headful, cache=TrackingCache()) as tracker:
         report = sync_orders(woo, tracker, StateStore(), cfg)
 
-    print(f"Đã kiểm tra {report.checked} đơn | cập nhật {len(report.updated)} | "
-          f"hoàn tất {len(report.completed)} | không có mã SPX {len(report.no_tracking)} | "
+    print(f"Đã kiểm tra {report.checked} đơn | gán mã {len(report.assigned)} | "
+          f"cập nhật {len(report.updated)} | đã giao {len(report.completed)} | "
+          f"chưa có trên SPX {len(report.no_tracking)} | "
           f"lỗi {len(report.errors)}")
     if report.no_tracking:
-        print("Đơn chưa có mã SPX:", ", ".join(f"#{i}" for i in report.no_tracking))
+        print("Đơn chưa có trên SPX:", ", ".join(f"#{i}" for i in report.no_tracking))
     return 1 if report.errors else 0
 
 

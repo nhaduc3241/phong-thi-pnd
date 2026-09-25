@@ -52,7 +52,10 @@ Mỗi lượt chạy sẽ:
    có chứa mã `SPXVN...`.
 3. Tra SPX. Nếu trạng thái đổi thì thêm ghi chú vào đơn. Khách thấy ghi chú trong "Tài khoản"
    và WooCommerce tự gửi email cho khách.
-4. Tuỳ chọn (`COMPLETE_ON_DELIVERED=1`): chuyển đơn sang "Đã hoàn thành" khi SPX báo đã giao.
+4. **Tra theo mã tham chiếu của shop** (`ORDER_REF_PREFIX=DEERSTORE`): đơn chưa có mã
+   vận đơn sẽ được tra bằng `DEERSTORE<số đơn>`. Nếu SPX có đơn, script ghi mã `SPXVN...`
+   vào đơn (meta `spx_tracking`) và chuyển sang `SHIPPING_STATUS`. Khi SPX báo đã giao,
+   script chuyển đơn sang `DELIVERED_STATUS`.
 
 ### Cài đặt
 1. Trong WordPress: **WooCommerce → Cài đặt → Nâng cao → REST API → Thêm khoá**, chọn quyền

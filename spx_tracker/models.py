@@ -14,7 +14,11 @@ VN_TZ = timezone(timedelta(hours=7))
 
 
 class SpxError(Exception):
-    """SPX trả về lỗi (retcode khác 0) hoặc dữ liệu không đọc được."""
+    """Không tra được SPX (lỗi mạng, bị chặn, dữ liệu không đọc được)."""
+
+
+class SpxNotFound(SpxError):
+    """SPX trả lời nhưng không có đơn với mã này (retcode khác 0 hoặc không có dữ liệu)."""
 
 
 @dataclass
@@ -64,11 +68,14 @@ def _parse_location(rec: dict) -> str | None:
 def parse_order_info(tracking_number: str, payload: dict[str, Any]) -> TrackingResult:
     retcode = payload.get("retcode", payload.get("code", 0))
     if retcode not in (0, None):
-        raise SpxError(f"SPX retcode={retcode}: {payload.get('message')}")
+        raise SpxNotFound(f"SPX retcode={retcode}: {payload.get('message')}")
 
     data = payload.get("data") or {}
     info = data.get("sls_tracking_info") or data
     records = info.get("records") or info.get("tracking_list") or []
+
+    if not records and not _first(info, "sls_tn", "spx_tn"):
+        raise SpxNotFound("SPX không trả dữ liệu cho mã này")
 
     events = [
         Event(

@@ -7,8 +7,10 @@ response JSON mà chính trang đó gọi tới `get_order_info`. Cookie và tok
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
+from urllib.parse import quote
 
 from playwright.sync_api import (
     BrowserContext,
@@ -23,6 +25,7 @@ from .models import SpxError, TrackingResult, parse_order_info
 
 TRACK_PAGE_URL = "https://spx.vn/track?{tn}"
 API_MARKER = "get_order_info"
+API_URL = "/shipment/order/open/order/get_order_info?spx_tn={tn}&language_code=vi"
 
 
 class SpxTracker:
@@ -117,12 +120,34 @@ class SpxTracker:
         self._throttle()
         # Dùng lại tab có sẵn (tab about:blank lúc mở trình duyệt) thay vì mở tab mới
         page: Page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
-        with page.expect_response(
-            lambda r: API_MARKER in r.url and tn in r.url,
-            timeout=self.timeout_ms,
-        ) as resp_info:
-            page.goto(TRACK_PAGE_URL.format(tn=tn), wait_until="domcontentloaded")
+        try:
+            with page.expect_response(
+                lambda r: API_MARKER in r.url and tn in r.url,
+                timeout=self.timeout_ms,
+            ) as resp_info:
+                page.goto(TRACK_PAGE_URL.format(tn=tn), wait_until="domcontentloaded")
+        except PlaywrightTimeout:
+            # Trang tra cứu không tự gọi API (ví dụ không nhận mã tham chiếu của shop):
+            # gọi API ngay trong tab đang mở spx.vn, dùng cookie của phiên hiện tại
+            return self._fetch_in_page(page, tn)
         resp = resp_info.value
         if resp.status != 200:
             raise SpxError(f"HTTP {resp.status}")
         return resp.json()
+
+    def _fetch_in_page(self, page: Page, tn: str) -> dict[str, Any]:
+        if not page.url.startswith("https://spx.vn"):
+            page.goto("https://spx.vn/", wait_until="domcontentloaded")
+        res = page.evaluate(
+            """async (url) => {
+                const r = await fetch(url, {credentials: "include"});
+                return {status: r.status, text: await r.text()};
+            }""",
+            API_URL.format(tn=quote(tn)),
+        )
+        if res["status"] != 200:
+            raise SpxError(f"HTTP {res['status']}")
+        try:
+            return json.loads(res["text"])
+        except ValueError as e:
+            raise SpxError(f"SPX trả về không phải JSON: {res['text'][:120]!r}") from e

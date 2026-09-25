@@ -6,7 +6,8 @@ Mỗi lần chạy sẽ:
   2. tìm mã vận đơn SPX trong meta của đơn, ghi chú khách hoặc ghi chú đơn
   3. tra SPX; nếu trạng thái đổi so với lần trước thì thêm ghi chú vào đơn
      (khách thấy được và nhận email từ WooCommerce)
-  4. tuỳ chọn: chuyển đơn sang "completed" khi SPX báo giao thành công
+  4. tuỳ chọn: tra theo mã tham chiếu của shop (DEERSTORE<số đơn>) để tự gán mã
+     vận đơn, chuyển đơn sang "đang giao" và sang "đã giao" khi SPX báo giao xong
 """
 
 from __future__ import annotations
@@ -18,13 +19,13 @@ from typing import Any, Iterable, Protocol
 
 import requests
 
-from .models import SpxError, TrackingResult
+from .models import SpxError, SpxNotFound, TrackingResult
 
 TRACKING_RE = re.compile(r"\bSPXVN\d{8,}\b", re.IGNORECASE)
 
 DEFAULT_META_KEYS = (
-    "_spx_tracking",
     "spx_tracking",
+    "_spx_tracking",
     "_tracking_number",
     "tracking_number",
     "_wc_shipment_tracking_items",  # plugin Advanced Shipment Tracking
@@ -80,8 +81,8 @@ class WooClient:
         self._request("POST", f"/orders/{order_id}/notes",
                       json={"note": text, "customer_note": customer_note})
 
-    def set_status(self, order_id: int, status: str) -> None:
-        self._request("PUT", f"/orders/{order_id}", json={"status": status})
+    def update_order(self, order_id: int, fields: dict) -> None:
+        self._request("PUT", f"/orders/{order_id}", json=fields)
 
 
 def _find_in(value: Any) -> str | None:
@@ -166,7 +167,15 @@ class SyncConfig:
     statuses: tuple[str, ...] = ("processing",)
     meta_keys: tuple[str, ...] = DEFAULT_META_KEYS
     delivered_keywords: tuple[str, ...] = DEFAULT_DELIVERED_KEYWORDS
-    complete_on_delivered: bool = False
+    # Nếu có, đơn chưa có mã SPX sẽ được tra bằng mã tham chiếu <ref_prefix><số đơn>,
+    # ví dụ DEERSTORE4212 cho đơn #4212
+    ref_prefix: str = ""
+    # Meta key để ghi mã SPX tìm được vào đơn
+    tracking_meta_key: str = "spx_tracking"
+    # Trạng thái WooCommerce (slug, không có "wc-") khi đã có mã vận đơn / khi đã giao.
+    # None = không đổi trạng thái.
+    shipping_status: str | None = None
+    delivered_status: str | None = None
     customer_note: bool = True
     dry_run: bool = False
 
@@ -175,9 +184,15 @@ class SyncConfig:
 class SyncReport:
     checked: int = 0
     no_tracking: list[int] = field(default_factory=list)
+    assigned: list[int] = field(default_factory=list)
     updated: list[int] = field(default_factory=list)
     completed: list[int] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+
+
+def real_tracking_number(result: TrackingResult) -> str | None:
+    """Mã SPXVN thật trong kết quả (khi tra bằng mã tham chiếu của shop)."""
+    return _find_in(result.tracking_number) or _find_in(result.raw)
 
 
 def sync_orders(woo: WooClient, tracker: Tracker, state: StateStore,
@@ -189,32 +204,62 @@ def sync_orders(woo: WooClient, tracker: Tracker, state: StateStore,
     for order in orders:
         oid = order["id"]
         report.checked += 1
-        tn = extract_tracking_number(order, cfg.meta_keys)
-        if tn is None:
+        tn = extract_tracking_number(order, (cfg.tracking_meta_key, *cfg.meta_keys))
+        if tn is None and not cfg.ref_prefix:
             tn = extract_tracking_number({}, (), notes=woo.list_notes(oid))
-        if tn is None:
+        query = tn or (f"{cfg.ref_prefix}{order.get('number') or oid}" if cfg.ref_prefix else None)
+        if query is None:
             log(f"#{oid}: chưa có mã SPX, bỏ qua")
             report.no_tracking.append(oid)
             continue
-        log(f"#{oid}: tra SPX {tn}...")
+
+        log(f"#{oid}: tra SPX {query}...")
         try:
-            result = tracker.track(tn)
+            result = tracker.track(query)
+        except SpxNotFound:
+            log(f"#{oid}: SPX chưa có đơn {query}")
+            report.no_tracking.append(oid)
+            continue
         except SpxError as e:
-            report.errors.append(f"#{oid} {tn}: {e}")
-            log(f"#{oid} {tn}: LỖI {e}")
+            report.errors.append(f"#{oid} {query}: {e}")
+            log(f"#{oid} {query}: LỖI {e}")
             continue
 
+        changes: dict = {}
+        # 1. Gán mã vận đơn tìm được qua mã tham chiếu
+        if tn is None:
+            tn = real_tracking_number(result)
+            if tn is None:
+                report.errors.append(f"#{oid} {query}: không thấy mã SPXVN trong kết quả")
+                log(f"#{oid}: không thấy mã SPXVN trong kết quả tra {query}")
+                continue
+            log(f"#{oid}: gán mã vận đơn {tn}")
+            changes["meta_data"] = [{"key": cfg.tracking_meta_key, "value": tn}]
+            report.assigned.append(oid)
+            if cfg.shipping_status and order.get("status") != cfg.shipping_status:
+                changes["status"] = cfg.shipping_status
+
+        # 2. Đã giao
+        if cfg.delivered_status and is_delivered(result, cfg.delivered_keywords):
+            log(f"#{oid} {tn}: đã giao -> {cfg.delivered_status}")
+            changes["status"] = cfg.delivered_status
+            report.completed.append(oid)
+        elif "status" in changes:
+            log(f"#{oid} {tn}: -> {changes['status']}")
+
+        # 3. Ghi chú khi trạng thái SPX thay đổi
         status = result.status or ""
-        if status and status != state.get(oid):
+        note_needed = status and status != state.get(oid)
+        if note_needed:
             log(f"#{oid} {tn}: {state.get(oid)!r} -> {status!r}")
-            if not cfg.dry_run:
-                woo.add_note(oid, format_note(result), customer_note=cfg.customer_note)
-                state.set(oid, tn, status)
             report.updated.append(oid)
 
-        if cfg.complete_on_delivered and is_delivered(result, cfg.delivered_keywords):
-            log(f"#{oid} {tn}: đã giao -> completed")
-            if not cfg.dry_run:
-                woo.set_status(oid, "completed")
-            report.completed.append(oid)
+        if cfg.dry_run:
+            continue
+        if changes:
+            woo.update_order(oid, changes)
+        if note_needed:
+            result.tracking_number = tn
+            woo.add_note(oid, format_note(result), customer_note=cfg.customer_note)
+            state.set(oid, tn, status)
     return report

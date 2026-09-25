@@ -1,5 +1,5 @@
 from .cache import TrackingCache
-from .models import Event, SpxError, TrackingResult, parse_order_info
+from .models import Event, SpxError, SpxNotFound, TrackingResult, parse_order_info
 
 __all__ = [
     "SpxTracker",
@@ -7,6 +7,7 @@ __all__ = [
     "TrackingResult",
     "Event",
     "SpxError",
+    "SpxNotFound",
     "parse_order_info",
 ]
 

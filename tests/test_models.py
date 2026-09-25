@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from spx_tracker import SpxError, TrackingCache, parse_order_info
+from spx_tracker import SpxError, SpxNotFound, TrackingCache, parse_order_info
 
 FIXTURE = Path(__file__).parent / "fixtures" / "order_info.json"
 
@@ -29,10 +29,9 @@ def test_parse_error_retcode():
         parse_order_info("X", {"retcode": 10001, "message": "not found"})
 
 
-def test_parse_empty_data():
-    res = parse_order_info("SPXVN1", {"retcode": 0, "data": {}})
-    assert res.status is None
-    assert res.events == []
+def test_parse_empty_data_is_not_found():
+    with pytest.raises(SpxNotFound):
+        parse_order_info("DEERSTORE1", {"retcode": 0, "data": {}})
 
 
 def test_cache_roundtrip_and_ttl(tmp_path):
