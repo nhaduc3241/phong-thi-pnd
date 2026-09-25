@@ -75,9 +75,9 @@ Mỗi lượt chạy sẽ:
   ```
   */30 * * * * cd /duong/dan/phong-thi-pnd && /usr/bin/python3 sync_woo.py >> sync.log 2>&1
   ```
-- **Windows:** mở Task Scheduler → Create Basic Task → Daily, rồi vào Triggers đặt
-  *Repeat task every 30 minutes*. Mục Action chọn chạy `python.exe` với tham số
-  `sync_woo.py`, *Start in* là thư mục chứa code.
+- **Windows:** bấm đúp `install_task.bat` để tạo lịch chạy mỗi ngày lúc 17:00 (sửa dòng
+  `set GIO_CHAY=17:00` trong file nếu muốn đổi giờ). Nếu đúng giờ đó máy đang tắt, lịch sẽ chạy bù
+  khi máy bật lại. Kết quả ghi vào `sync.log`. Muốn gỡ lịch thì bấm đúp `uninstall_task.bat`.
 
 Máy chạy worker nên ở Việt Nam: IP nhà mạng hoặc VPS trong nước ít bị SPX chặn hơn IP nước ngoài.
 
