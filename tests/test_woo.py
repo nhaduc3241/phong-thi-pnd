@@ -34,7 +34,10 @@ def test_real_tracking_number_from_raw():
 
 def test_is_delivered_and_note():
     assert is_delivered(result("Giao hàng thành công"))
+    assert is_delivered(result("Delivered"))
+    assert is_delivered(result("x", desc="Giao hàng thành công cho người nhận"))
     assert not is_delivered(result("Đang giao hàng"))
+    assert not is_delivered(result("Preparing to ship", desc="Đã giao cho đơn vị vận chuyển"))
     assert "Bưu cục A" in format_note(result("Đang giao hàng"))
 
 

@@ -32,7 +32,7 @@ DEFAULT_META_KEYS = (
     "_wc_shipment_tracking_items",  # plugin Advanced Shipment Tracking
 )
 
-DEFAULT_DELIVERED_KEYWORDS = ("giao hàng thành công", "đã giao", "delivered")
+DEFAULT_DELIVERED_KEYWORDS = ("delivered", "giao hàng thành công")
 
 
 class WooClient:
@@ -125,9 +125,14 @@ def extract_tracking_number(order: dict, meta_keys: Iterable[str] = DEFAULT_META
 
 
 def is_delivered(result: TrackingResult, keywords: Iterable[str] = DEFAULT_DELIVERED_KEYWORDS) -> bool:
-    text = " ".join(filter(None, [result.status, result.events[0].description if result.events else None]))
-    text = text.lower()
-    return any(k.lower() in text for k in keywords)
+    """Đã giao khi trạng thái SPX đúng bằng một từ khoá (vd "Delivered"), hoặc mô tả
+    mới nhất chứa "giao hàng thành công". Không so khớp một phần với trạng thái, để
+    "Đã giao cho đơn vị vận chuyển" không bị coi là đã giao."""
+    kws = {k.strip().casefold() for k in keywords}
+    if (result.status or "").strip().casefold() in kws:
+        return True
+    desc = (result.events[0].description if result.events else "").casefold()
+    return "giao hàng thành công" in desc
 
 
 def format_note(result: TrackingResult) -> str:
