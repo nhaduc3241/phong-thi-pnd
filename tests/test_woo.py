@@ -170,3 +170,24 @@ def test_existing_tracking_in_processing_moves_to_shipping(tmp_path):
     rep = sync_orders(woo, tracker, StateStore(str(tmp_path / "s.db")), cfg, log=quiet)
     assert rep.assigned == []
     assert woo.updates == [(4212, {"status": "shipping"})]
+
+
+def test_tracking_number_with_trailing_letter():
+    # Mã SPX có thể kết thúc bằng chữ cái, vd SPXVN06265652126A
+    r = TrackingResult("DEERSTORE4239", "Đang giao hàng", [],
+                       raw={"data": {"sls_tracking_info": {"sls_tn": "SPXVN06265652126A"}}})
+    assert real_tracking_number(r) == "SPXVN06265652126A"
+    order = {"meta_data": [{"key": "spx_tracking", "value": "spxvn06265652126a"}]}
+    assert extract_tracking_number(order) == "SPXVN06265652126A"
+
+
+def test_lookup_by_reference_with_letter_suffix(tmp_path):
+    woo = FakeWoo([{"id": 4239, "number": "4239", "status": "processing", "meta_data": []}])
+    res = TrackingResult("DEERSTORE4239", "Đang giao hàng", [],
+                         raw={"data": {"sls_tracking_info": {"sls_tn": "SPXVN06265652126A",
+                                                             "client_order_id": "DEERSTORE4239"}}})
+    tracker = FakeTracker({"DEERSTORE4239": res})
+    rep = sync_orders(woo, tracker, StateStore(str(tmp_path / "s.db")),
+                      SyncConfig(ref_prefix="DEERSTORE", shipping_status="dang-giao"), log=quiet)
+    assert rep.assigned == [4239] and rep.errors == []
+    assert woo.updates[0][1]["meta_data"][0]["value"] == "SPXVN06265652126A"

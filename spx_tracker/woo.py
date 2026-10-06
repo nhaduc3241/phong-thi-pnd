@@ -22,7 +22,7 @@ import requests
 
 from .models import SpxError, SpxNotFound, TrackingResult
 
-TRACKING_RE = re.compile(r"\bSPXVN\d{8,}\b", re.IGNORECASE)
+TRACKING_RE = re.compile(r"\bSPXVN\d{8,}[A-Z0-9]*\b", re.IGNORECASE)
 
 DEFAULT_META_KEYS = (
     "spx_tracking",
