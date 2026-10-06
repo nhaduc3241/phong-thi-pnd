@@ -22,7 +22,9 @@ import requests
 
 from .models import SpxError, SpxNotFound, TrackingResult
 
-TRACKING_RE = re.compile(r"\bSPXVN\d{8,}[A-Z0-9]*\b", re.IGNORECASE)
+# Mã SPX: "SPXVN" + chữ/số lẫn lộn (chữ có thể ở cuối hoặc giữa, vd SPXVN06265652126A),
+# dài ít nhất 8 ký tự và có ít nhất 6 chữ số để không bắt nhầm chữ thường.
+TRACKING_RE = re.compile(r"\bSPXVN(?=(?:[A-Z]*\d){6})[A-Z0-9]{8,}\b", re.IGNORECASE)
 
 DEFAULT_META_KEYS = (
     "spx_tracking",

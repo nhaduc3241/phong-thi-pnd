@@ -191,3 +191,14 @@ def test_lookup_by_reference_with_letter_suffix(tmp_path):
                       SyncConfig(ref_prefix="DEERSTORE", shipping_status="dang-giao"), log=quiet)
     assert rep.assigned == [4239] and rep.errors == []
     assert woo.updates[0][1]["meta_data"][0]["value"] == "SPXVN06265652126A"
+
+
+def test_tracking_number_formats():
+    from spx_tracker.woo import TRACKING_RE
+    ok = ["SPXVN061359307249", "SPXVN06265652126A", "SPXVN0626A5652126", "SPXVNA06265652126",
+          "SPXVN12AB345678CD"]
+    for tn in ok:
+        assert TRACKING_RE.fullmatch(tn), tn
+        assert extract_tracking_number({"customer_note": f"Mã: {tn}, cảm ơn"}) == tn
+    for bad in ["SPXVNABCDEFGH", "SPXVN12345", "XSPXVN061359307249"]:
+        assert extract_tracking_number({"customer_note": bad}) is None, bad
